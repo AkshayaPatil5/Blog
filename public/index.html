@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blog</title>
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    
+      body {
+        background-color: #f8f9fa;
+        padding: 20px;
+      }
+      
+      .blog-form {
+        background-color: #c5cd71; 
+        padding: 20px;
+        height: 500px;
+        border-right: 1px solid #ccc;
+      }
+    
+      .blog-card {
+        margin-bottom: 20px;
+        padding: 20px;
+        border: 1px solid #141413;
+        border-radius: 5px;
+        background-color: #f8f9fa;;
+      }
+    
+      .blog-content {
+        display: none; 
+        margin-top: 10px;
+      }
+    </style>
+</head>
+<body>
+  
+    <div class="row">
+      
+      <div class="col-md-4 blog-form">
+        <h3>Create a blog</h3>
+        <form onsubmit="saveToLocalStorage(event)">
+          <div class="form-group">
+            <label for="blogTitle">BLOG TITLE:</label>
+            <input type="text" class="form-control" id="blogTitle" required>
+          </div>
+          <div class="form-group">
+            <label for="blogAuthor">BLOG AUTHOR:</label>
+            <input type="text" class="form-control" id="blogAuthor" required>
+          </div>
+          <div class="form-group">
+            <label for="blogDescription">BLOG DESCRIPTION:</label>
+            <input type="text" class="form-control" id="blogDescription" required>
+          </div>
+          <button type="submit" class="btn btn-primary">Submit</button>
+        </form>
+      </div>
+      
+      <div class="col-md-8">
+        <h3>All Blogs</h3>
+        <div id="blogs"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.4.0/axios.min.js"></script>
+  <script>
+    function saveToLocalStorage(event) {
+      event.preventDefault();
+      const title = document.getElementById('blogTitle').value;
+      const author = document.getElementById('blogAuthor').value;
+      const description = document.getElementById('blogDescription').value;
+      const obj = {
+        title,
+        author,
+        description
+      };
+
+      axios.post("http://localhost:3000/blogs/add-blog", obj)
+        .then((response) => {
+          console.log(response);
+          showBlogOnScreen(response.data.newBlog);
+        })
+        .catch((err) => {
+         console.log(err);
+        });
+
+      const timestamp = Date.now();
+      localStorage.setItem(timestamp, JSON.stringify(obj));
+    }
+
+    function showBlogOnScreen(obj) {
+      const blogsContainer = document.getElementById('blogs');
+      const blogCard = document.createElement('div');
+      blogCard.classList.add('blog-card'); 
+
+      blogCard.innerHTML = `
+        <div class="blog-title" onclick="toggleBlog(this)">
+          <h4>${obj.title}</h4>
+         
+          <span class="toggle-icon">+</span>
+        </div>
+        <div class="blog-content">
+          <p>Author: ${obj.author}</p>
+          <p>${obj.description}</p>
+
+          <form onsubmit="addComment(event, ${obj.id})">
+            <input type="text" id="comment-${obj.id}" placeholder="Add a comment" required>
+            <button type="submit">Comment</button>
+          </form>
+          <ul id="comment-list-${obj.id}"></ul>
+        </div>
+      `;
+
+      blogsContainer.appendChild(blogCard);
+    }
+
+    function toggleBlog(blogTitle) {
+      const blogContent = blogTitle.nextElementSibling; 
+      const toggleIcon = blogTitle.querySelector('.toggle-icon');
+
+      if (blogContent.style.display === 'none' || blogContent.style.display === '') {
+        blogContent.style.display = 'block';
+        toggleIcon.textContent = '-';
+      } else {
+        blogContent.style.display = 'none';
+        toggleIcon.textContent = '+';
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      axios.get("http://localhost:3000/blogs/get-blogs")
+        .then((response) => {
+          console.log(response);
+          const blogs = response.data.allBlogs;
+          for (let i = 0; i < blogs.length; i++) {
+            showBlogOnScreen(blogs[i]);
+            reloadComments(blogs[i].id);
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    });
+
+    function addComment(event, blogId) {
+      event.preventDefault();
+      const commentInput = document.getElementById(`comment-${blogId}`);
+      const commentText = commentInput.value;
+
+      axios.post(`http://localhost:3000/blogs/add-comment/${blogId}`, {
+        text: commentText
+      })
+        .then((response) => {
+          console.log(response);
+          showCommentOnScreen(blogId, response.data.newComment);
+          commentInput.value = ''; 
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+
+    function showCommentOnScreen(blogId, comment) {
+      const commentList = document.getElementById(`comment-list-${blogId}`);
+      const listItem = document.createElement('li');
+
+      listItem.innerHTML = `${comment.text}`;
+
+      
+            listItem.innerHTML += ` <a href="#" onclick="deleteComment(${comment.id})">Delete</a>`;
+
+      commentList.appendChild(listItem);
+    }
+
+    function deleteComment(commentId) {
+      axios.delete(`http://localhost:3000/blogs/delete-comment/${commentId}`)
+        .then(() => {
+          const commentElement = document.getElementById(`comment-${commentId}`);
+          if (commentElement) {
+            const parent = commentElement.parentNode;
+            if (parent) {
+              parent.removeChild(commentElement); 
+            }
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+
+    function reloadComments(blogId) {
+      axios.get(`http://localhost:3000/blogs/get-comments/${blogId}`)
+        .then((response) => {
+          console.log(response);
+          const comments = response.data.comments;
+          const commentList = document.getElementById(`comment-list-${blogId}`);
+          for (let i = 0; i < comments.length; i++) {
+            showCommentOnScreen(blogId, comments[i]);
+          }
+        })
+        .catch((err) => {
+          console.log(err);
+        });
+    }
+  </script>
+</body>
+</html>
+
